@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-""" 
+
+"""
 This program is free software: you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
 Foundation, either version 3 of the License, or (at your option) any later
@@ -25,13 +26,12 @@ __version__ = "1.0.0"
 
 from pymongo import MongoClient
 import gridfs
-from pprint import pprint
 from mimetypes import MimeTypes
 import sys
-import getopt
 import csv
 import argparse
 import urllib.parse
+import os
 
 
 class FileSystemStore():
@@ -112,20 +112,24 @@ class Migrator():
                             filename = filename + fileext
 
                         i += 1
-                        print("%i. Dumping %s %s" % (i, gridfsId,
-                                                     upload['name']))
+                        print("%i. Dumping %s %s" % (i, gridfsId, upload['name']))
                         key = store.put(filename, data, upload)
-
-                        self.addtolog({
+                        print("%i. Finished dumping %s %s" % (i, gridfsId, upload['name']))
+                        logitem = {
                             "id": gridfsId,
                             "file": filename,
                             "collection": collection,
                             "md5": res.md5,
                             "key": key
-                        })
+                        }
+                        self.updateDbEntry(logitem, i, db)
+                        self.removeBlobsEntry(logitem, i, db)
+
+                        self.addtolog(logitem)
+                        self.writelog()
+                        self.log.pop()
                 else:
                     print("[Warning] Skipping incomplete upload %s" % (gridfsId), file=sys.stderr)
-        self.writelog()
 
     def addtolog(self, entry):
         self.log.append(entry)
@@ -178,6 +182,26 @@ class Migrator():
 
                 collection.update_one({"_id": dbId}, {"$set": update_data})
 
+    def updateDbEntry(self, entry, i, db):
+        target = "FileSystem"
+        dbId = entry['id']
+        filename = entry['file']
+        collectionName = entry['collection']
+        md5 = entry['md5']
+        key = entry['key']
+        collection = db[collectionName]
+        update_data = {
+            "store":
+                target + ":Uploads",
+            "path":
+                "/ufs/" + target + ":Uploads/" + dbId + "/" + filename,
+            "url":
+                "/ufs/" + target + ":Uploads/" + dbId + "/" + filename
+        }
+        print("%i. Updating record %s" % (i, dbId))
+        collection.update_one({"_id": dbId}, {"$set": update_data})
+        print("%i. Updated record %s" % (i, dbId))
+
     def removeBlobs(self):
         with open(self.logfile) as csvfile:
             db = MongoClient(host=self.host, port=self.port)[self.db]
@@ -196,6 +220,18 @@ class Migrator():
                     fs.delete(dbId)
                 except:
                     continue
+
+    def removeBlobsEntry(self, entry, i, db):
+        dbId = entry['id']
+        collectionName = entry['collection']
+        fs = gridfs.GridFSBucket(db, bucket_name=collectionName)
+        print("%i. Removing blob %s" % (i, dbId))
+
+        try:
+            fs.delete(dbId)
+            print("%i. Removed blob %s" % (i, dbId))
+        except:
+            print("%i. Failed removing blob %s" % (i, dbId))
 
 
 if __name__ == "__main__":
