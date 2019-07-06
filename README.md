@@ -38,4 +38,4 @@ Run `./migrate -h` to see all available options
 ### Requirements
 
 - apt-get install python3 wget python3-pip -y
-- pip3 install  pymongodb boto3
+- pip3 install  pymongo boto3
