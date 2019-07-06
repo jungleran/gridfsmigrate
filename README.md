@@ -34,3 +34,8 @@ Run `./migrate -h` to see all available options
 6. Remove obsolete data from GridFS
 
         ./migrate -c removeblobs -d /app/uploads -r rocketchat
+
+### Requirements
+
+- apt-get install python3 wget python3-pip -y
+- pip3 install  pymongodb boto3
